@@ -3,10 +3,10 @@ import { transaksi } from "../db/transaksi.js";
 import { HttpError, metaHalaman } from "../lib/api.js";
 
 const kolom = `p.id, p.penyedia_id, py.nama_usaha AS penyedia,
-  p.nama, p.kategori, p.harga_normal, p.harga_penawaran,
-  p.stok, p.satuan, p.status, p.berakhir_pada, p.dibuat_pada`;
-
-const gabung = "FROM penawaran p JOIN penyedia py ON py.id = p.penyedia_id";
+               p.nama, p.kategori, p.harga_normal, p.harga_penawaran,
+               p.stok, p.satuan, p.status, p.berakhir_pada, p.dibuat_pada`;
+const gabung = `FROM penawaran p JOIN penyedia py ON py.id = p.penyedia_id
+                JOIN pengguna pemilik ON pemilik.id = py.pengguna_id`;
 
 export function kePenawaran(row) {
   return {
@@ -25,33 +25,44 @@ export function kePenawaran(row) {
   };
 }
 
-export async function bacaPenawaran(id, db = pool) {
+export async function bacaPenawaran(id, db = pool, publik = false) {
   const hasil = await db.query(
-    `SELECT ${kolom} ${gabung} WHERE p.id = $1`,
-    [id]
+    `SELECT ${kolom} ${gabung} WHERE p.id = $1
+     AND (NOT $2::boolean OR (p.status = 'aktif' AND p.stok > 0
+     AND p.berakhir_pada > CURRENT_TIMESTAMP AND pemilik.aktif = TRUE
+     AND pemilik.peran = 'penyedia' AND py.status_verifikasi = 'terverifikasi'))`,
+    [id, publik]
   );
   if (!hasil.rowCount) {
-    throw new HttpError(404, "OFFER_NOT_FOUND", "Penawaran tidak ditemukan.");
+    throw new HttpError(404, "OFFER NOT FOUND", "Penawaran tidak ditemukan.");
   }
   return kePenawaran(hasil.rows[0]);
 }
 
-export function daftarPenawaran(filter, paging) {
+export function daftarPenawaran(filter, paging, pemilikId = null) {
   return transaksi(async (client) => {
     const where = `WHERE ($1::text = '' OR
-        POSITION(LOWER($1) IN LOWER(p.nama || ' ' || py.nama_usaha)) > 0)
-      AND ($2::text = '' OR p.kategori = $2)
-      AND ($3::text = '' OR p.status = $3)
-      AND (NOT $4::boolean OR (p.status = 'aktif' AND p.stok > 0
-        AND p.berakhir_pada > CURRENT_TIMESTAMP))`;
-    const nilai = [filter.q, filter.kategori, filter.status, filter.tersedia];
+                  POSITION(LOWER($1) IN LOWER(p.nama || ' ' || py.nama_usaha)) > 0)
+                  AND ($2::text = '' OR p.kategori = $2)
+                  AND ($3::text = '' OR p.status = $3)
+                  AND (NOT $4::boolean OR (p.status = 'aktif' AND p.stok > 0
+                  AND p.berakhir_pada > CURRENT_TIMESTAMP AND pemilik.aktif = TRUE
+                  AND pemilik.peran = 'penyedia' AND py.status_verifikasi = 'terverifikasi'))
+                  AND ($5::bigint IS NULL OR p.penyedia_id = $5)`;
+    const nilai = [
+      filter.q,
+      filter.kategori,
+      filter.status,
+      filter.tersedia,
+      pemilikId,
+    ];
     const count = await client.query(
       `SELECT COUNT(*)::int AS jumlah ${gabung} ${where}`,
       nilai
     );
     const hasil = await client.query(
       `SELECT ${kolom} ${gabung} ${where}
-       ORDER BY p.id DESC LIMIT $5 OFFSET $6`,
+       ORDER BY p.id DESC LIMIT $6 OFFSET $7`,
       [...nilai, paging.limit, paging.offset]
     );
     return {
@@ -65,35 +76,24 @@ export async function simpanPenawaran(data, id = null) {
   return transaksi(async (client) => {
     if (id !== null) {
       const lama = await client.query(
-        "SELECT penyedia_id FROM penawaran WHERE id = $1 FOR UPDATE",
-        [id]
+        `SELECT penyedia_id FROM penawaran WHERE id = $1 AND penyedia_id = $2 FOR UPDATE`,
+        [id, data.penyediaId]
       );
       if (!lama.rowCount) {
-        throw new HttpError(
-          404,
-          "OFFER_NOT_FOUND",
-          "Penawaran tidak ditemukan."
-        );
+        throw new HttpError(404, "OFFER NOT FOUND", "Penawaran tidak ditemukan.");
       }
       if (String(lama.rows[0].penyedia_id) !== data.penyediaId) {
-        throw new HttpError(
-          409,
-          "PROVIDER_IMMUTABLE",
-          "Penyedia tidak boleh diganti."
-        );
+        throw new HttpError(409, "PROVIDER IMMUTABLE", "Penyedia tidak boleh diganti.");
       }
     }
     const penyedia = await client.query(
       `SELECT py.id FROM penyedia py JOIN pengguna u ON u.id = py.pengguna_id
-       WHERE py.id = $1 AND u.peran = 'penyedia' AND u.aktif = TRUE`,
+       WHERE py.id = $1 AND u.peran = 'penyedia' AND u.aktif = TRUE
+       AND py.status_verifikasi = 'terverifikasi'`,
       [data.penyediaId]
     );
     if (!penyedia.rowCount) {
-      throw new HttpError(
-        404,
-        "PROVIDER_NOT_FOUND",
-        "Penyedia aktif tidak ditemukan."
-      );
+      throw new HttpError(404, "PROVIDER NOT FOUND", "Penyedia aktif tidak ditemukan.");
     }
     const nilai = [
       data.penyediaId,
@@ -120,17 +120,16 @@ export async function simpanPenawaran(data, id = null) {
              WHERE id = $10 AND penyedia_id = $1 RETURNING id`,
             [...nilai, id]
           );
-
     return bacaPenawaran(hasil.rows[0].id, client);
   });
 }
 
-export async function hapusPenawaran(id) {
+export async function hapusPenawaran(id, penyediaId) {
   const hasil = await pool.query(
-    "DELETE FROM penawaran WHERE id = $1 RETURNING id",
-    [id]
+    `DELETE FROM penawaran WHERE id = $1 AND penyedia_id = $2 RETURNING id`,
+    [id, penyediaId]
   );
   if (!hasil.rowCount) {
-    throw new HttpError(404, "OFFER_NOT_FOUND", "Penawaran tidak ditemukan.");
+    throw new HttpError(404, "OFFER NOT FOUND", "Penawaran tidak ditemukan.");
   }
 }
