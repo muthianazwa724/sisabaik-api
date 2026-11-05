@@ -1,59 +1,122 @@
-Developed by : Muthia Nazwa Marlina NIM.23367036
+# SisaBaik – Chapter 9
 
-# SisaBaik API - Chapter 8
+Developed by: Muthia Nazwa Marlina  
+NIM:23367036
 
-SisaBaik adalah proyek berkembang pada mata kuliah Pengembangan Web. Aplikasi ini dirancang untuk membantu penyedia memulihkan nilai stok makanan berlebih melalui penjualan dengan harga khusus atau penyaluran, sekaligus membantu masyarakat memperoleh makanan yang lebih terjangkau dan mengurangi limbah pangan. Pada Chapter 8 ini, sistem melengkapi fondasi akun dengan autentikasi (JWT) dan otorisasi berbasis peran (RBAC) serta peninjauan usaha penyedia.
+SisaBaik merupakan proyek mata kuliah Pengembangan Web yang dikembangkan untuk membantu penyedia memulihkan nilai stok makanan berlebih melalui penjualan dengan harga khusus atau penyaluran. Aplikasi ini juga membantu masyarakat memperoleh makanan yang lebih terjangkau dan mengurangi limbah pangan.
 
-## Capaian Chapter 8
+Pada Chapter 9, pengembangan difokuskan pada pembangunan antarmuka frontend menggunakan Vue 3 dan Vite.
 
-- **Migrasi Basis Data**: Menambahkan kolom `kata_sandi_hash` (TEXT) dan `versi_token` (INTEGER) pada tabel `pengguna` melalui `database/07_auth.sql` tanpa menghapus data historis Chapter 6-7.
-- **Pendaftaran Mandiri & Hash Sandi**: Mengimplementasikan registrasi mandiri untuk peran Pembeli (`POST /api/auth/registrasi`) dan Penyedia (`POST /api/auth/registrasi-penyedia`) dengan *hashing* kata sandi menggunakan `bcryptjs` (faktor kerja 12).
-- **Peninjauan Usaha Penyedia**: Pendaftaran penyedia secara otomatis menghasilkan status usaha `menunggu`. Pengelola/operator meninjau dan menyetujui izin usaha via script CLI (`npm run penyedia:verifikasi <email>`).
-- **Autentikasi JWT**: Penerbitan JSON Web Token (HS256) berdurasi 15 menit saat login (`POST /api/auth/login`) yang dikirim melalui header `Authorization: Bearer <token>`.
-- **Otorisasi Server-Side (RBAC) & Kepemilikan Data**:
-  - Middleware `wajibLogin`, `wajibPeran`, dan `wajibPenyediaTerverifikasi` membatasi akses endpoint terlindungi.
-  - Penyedia terverifikasi hanya dapat mengelola penawaran miliknya (`GET /api/penawaran/milik-saya`, `PUT/DELETE /api/penawaran/:id`).
-  - Pembeli hanya dapat memesan atas akun sendiri (`POST /api/pesanan`), dan pesanan dibatasi agar hanya dapat dibaca oleh pembeli pemesan atau penyedia penerima.
-- **Pencabutan Sesi (Logout)**: Menambahkan mekanisme *logout* seluruh sesi (`POST /api/auth/logout`) dengan menaikkan `versi_token` pada database untuk membatalkan semua token lama.
-- **Pengamanan Tambahan**: Menerapkan Helmet header keamanan, pembatas laju request (*rate-limiting*) terpisah untuk login dan registrasi, pengabaian `.env` dari Git, serta respon `401/403/404` yang tidak membocorkan data privat.
-- **Pengujian Otomatis**: Lolos 44 pemeriksaan assertion HTTP dan pengujian kepemilikan data via `npm run auth:test`.
+## Capaian Chapter 9
 
-## Struktur Berkas Utama
+### 1. Vue 3 Composition API
+Menggunakan Composition API untuk mengelola data dan interaksi aplikasi, meliputi:
+- `ref` untuk menyimpan state.
+- `computed` untuk menghasilkan data turunan.
+- `props` untuk mengirim data antarkomponen.
+- `emits` untuk mengirim event dari komponen anak ke induk.
 
-- `server.js` : Berkas utama (*entry point*) untuk menjalankan server Express pada port lokal `3000`.
-- `src/app.js` : Konfigurasi aplikasi Express, middleware keamanan (Helmet, rate limiter, logger, JSON limit 20kb, static files), serta pendaftaran rute.
-- `src/config/auth.js` : Konfigurasi rahasia JWT (64-digit hex) dan parameter autentikasi.
-- `src/lib/` :
-  - `token.js` : Helper penerbitan (`sign`) dan verifikasi (`verify`) JWT HS256.
-  - `input-auth.js` : Helper validasi skema input registrasi, login, dan validasi sesi.
-  - `api.js` : Helper validasi umum dan pemetaan kelas `HttpError`.
-- `src/repositories/` :
-  - `pengguna.js` : Akses data SQL langsung ke tabel `pengguna` dan `penyedia` (termasuk fungsi registrasi transaksi atomik).
-  - `penawaran.js` : Akses data SQL `penawaran` dengan kondisi penguncian kepemilikan `penyedia_id`.
-- `src/services/` :
-  - `auth.js` : Logika bisnis autentikasi (pencocokan hash bcrypt, pencegahan timing-attack dengan `hashDummy`, penerbitan token).
-  - `pesanan.js` : Logika bisnis transaksi pemesanan berbasis `pembeli_id` dari token terautentikasi.
-- `src/middleware/` :
-  - `auth.js` : Middleware verifikasi JWT (`wajibLogin`), pengecekan peran (`wajibPeran`), dan otorisasi penyedia (`wajibPenyediaTerverifikasi`).
-  - `batas-auth.js` : Rate-limiter terpisah untuk login (`batasAuth`) dan pendaftaran (`batasRegistrasi`).
-- `src/routes/` : Pendaftaran endpoint HTTP untuk `/api/auth`, `/api/penawaran`, dan `/api/pesanan`.
-- `public/` : Halaman penguji latihan autentikasi (`auth.html`, `auth.css`, dan `auth.js`) menggunakan penyimpanan token di memori.
-- `scripts/` :
-  - `verifikasi-penyedia.js` : Script CLI operator untuk meninjau/menyetujui status penyedia (`npm run penyedia:verifikasi`).
-  - `uji-auth.js` : Script pengujian otomatis untuk alur autentikasi, otorisasi, dan kepemilikan (`npm run auth:test`).
-- `docs/` : Spesifikasi kontrak API (`API.md`) dan laporan hasil pengujian aktual (`hasil-uji-chapter8.md`).
+### 2. Komponen Reusable
+Membuat komponen yang dapat digunakan kembali:
+- `KartuPenawaran.vue`
+- `FilterPenawaran.vue`
+- `FormPenawaran.vue`
+- `Ikon.vue`
 
-## Prasyarat & Konfigurasi Lingkungan
+### 3. Katalog dan Filter Penawaran
+- Menampilkan daftar penawaran makanan.
+- Pencarian berdasarkan nama makanan atau penyedia.
+- Filter berdasarkan kategori makanan.
+- Menampilkan pesan ketika hasil pencarian kosong.
 
-1. **Node.js**: Minimum v22.0.0.
-2. **PostgreSQL**: Terpasang lokal dengan database `sisabaik_dev` dan migrasi `database/07_auth.sql` yang sudah diterapkan.
-3. **Berkas Environment (`.env`)**:
-   Salin `.env.example` menjadi `.env` di root proyek:
-   ```env
-   PORT=3000
-   PGHOST=localhost
-   PGPORT=5432
-   PGDATABASE=sisabaik_dev
-   PGUSER=postgres
-   PGPASSWORD=ganti_dengan_password_lokal
-   JWT_SECRET=ganti_dengan_64_digit_hex_acak
+### 4. Mode Pembeli dan Penyedia
+- Mode Pembeli menampilkan katalog makanan yang tersedia.
+- Mode Penyedia menampilkan daftar penawaran milik penyedia latihan.
+- Menghitung jumlah penawaran dan stok menggunakan `computed`.
+
+### 5. Formulir dan Validasi
+- Menambahkan penawaran makanan melalui formulir.
+- Memvalidasi nama, kategori, harga normal, harga penawaran, stok, status, dan waktu berakhir.
+- Harga penawaran sebesar 0 diperbolehkan untuk penawaran gratis.
+- Menolak data yang tidak memenuhi ketentuan validasi.
+
+### 6. Aset Visual
+Menggunakan aset SVG lokal berupa logo SisaBaik dan ilustrasi makanan untuk mendukung tampilan antarmuka.
+
+### 7. Penyimpanan Data
+- Data latihan berasal dari fixture pada `src/data/penawaran-latihan.js`.
+- Perubahan state disimpan sementara di memori halaman Vue.
+- Frontend pada chapter ini belum melakukan pemanggilan API dan belum menggunakan PostgreSQL untuk menyimpan data.
+- Data penawaran yang ditambahkan akan kembali ke data awal setelah halaman di-refresh.
+
+## Struktur Berkas Frontend
+
+Direktori frontend berada di dalam folder `frontend/`.
+
+- `index.html`: Dokumen HTML utama.
+- `src/main.js`: Entry point aplikasi Vue.
+- `src/App.vue`: Komponen utama aplikasi.
+- `src/style.css`: Styling dan desain antarmuka.
+- `src/assets/`: Logo dan ilustrasi SVG.
+- `src/components/`: Komponen kartu, filter, formulir, dan ikon.
+- `src/data/`: Data fixture latihan.
+- `src/lib/`: Helper tampilan, visual, dan validasi formulir.
+
+## Prasyarat
+
+- Node.js minimal v22.0.0.
+- npm.
+
+## Instalasi dan Menjalankan Frontend
+
+Masuk ke direktori frontend:
+
+```bash
+cd frontend
+```
+
+Pasang dependency:
+
+```bash
+npm install
+```
+
+Jalankan development server:
+
+```bash
+npm run dev
+```
+
+Buat production build:
+
+```bash
+npm run build
+```
+
+Jalankan preview hasil build:
+
+```bash
+npm run preview
+```
+
+Development server berjalan pada:
+
+`http://127.0.0.1:5173/`
+
+Preview hasil build berjalan pada:
+
+`http://127.0.0.1:4173/`
+
+## Hasil Build dan Pengujian
+
+Proses build dilakukan menggunakan perintah `npm run build`.
+
+Build yang berhasil menghasilkan direktori `frontend/dist` yang berisi `index.html` dan aset hasil kompilasi.
+
+Hasil build kemudian diperiksa melalui preview browser. Pengujian dilakukan terhadap katalog, pencarian, filter kategori, pergantian mode tampilan, dan formulir penawaran.
+
+## Catatan Pengembangan
+
+Chapter 9 berfokus pada pembangunan antarmuka frontend menggunakan Vue 3. Data yang digunakan masih berupa fixture latihan dan belum terhubung dengan API backend.
+
+Integrasi frontend dengan backend, autentikasi pengguna, dan penyimpanan data melalui PostgreSQL akan dikembangkan pada pertemuan berikutnya.
