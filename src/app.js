@@ -1,3 +1,4 @@
+
 import express from "express";
 import helmet from "helmet";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,7 @@ const hop = process.env.TRUST_PROXY_HOPS ?? "0";
 if (!["0", "1"].includes(hop)) {
   throw new Error("TRUST_PROXY_HOPS wajib 0 atau 1.");
 }
+
 app.set("trust proxy", Number(hop));
 const melaluiProxy = produksi && hop === "1";
 
@@ -47,7 +49,7 @@ app.use("/api", (req, res, next) => {
     return next(
       new HttpError(
         415,
-        "JSON REQUIRED",
+        "JSON_REQUIRED",
         "Gunakan Content-Type application/json.",
       ),
     );
@@ -78,7 +80,7 @@ app.get("/api/health", async (req, res) => {
       status: "ok",
       database: "connected",
       waktu: new Date().toISOString(),
-    }
+    },
   });
 });
 
